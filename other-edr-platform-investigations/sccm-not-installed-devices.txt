@@ -1,0 +1,17 @@
+// Title: Windows Devices With No SCCM Client Process Activity (Past 30 Days)
+// Category: Investigation Query
+// Note: This query uses a devices/execution.events query language rather
+//       than KQL/Advanced Hunting syntax — likely written for a different
+//       EDR/XDR platform's query builder. Kept here for reference; see the
+//       repo README for details before running it against Defender for
+//       Endpoint Advanced Hunting.
+
+devices during past 30d
+| where device.operating_system.platform == Windows
+| with execution.events during past 30d
+| compute has_sccm_process = countif(
+    binary.name == "ccmexec.exe" or 
+    binary.name == "smsagent.exe")
+| where has_sccm_process == 0
+| list device.name, device.operating_system.name, device.entity, device.hardware.model, device.hardware.type, device.last_seen
+| sort device.last_seen desc

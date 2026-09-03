@@ -1,0 +1,29 @@
+// Title: Devices With Npcap Packet-Capture Driver Activity (Past 30 Days)
+// Category: Investigation Query
+// Note: This query uses a devices/execution.events query language rather
+//       than KQL/Advanced Hunting syntax — likely written for a different
+//       EDR/XDR platform's query builder. Kept here for reference; see the
+//       repo README for details before running it against Defender for
+//       Endpoint Advanced Hunting.
+
+execution.events during past 30d
+| where binary.name == "*npcap*" or binary.product_name == "*Npcap*"
+| summarize 
+    total_executions = count(),
+    last_seen = timestamp.last()
+    by device.name, 
+    device.entity, 
+    device.operating_system.name,
+    device.hardware.type,
+    binary.name,
+    binary.product_name
+| list 
+    device.name,
+    device.entity,
+    device.operating_system.name,
+    device.hardware.type,
+    binary.name,
+    binary.product_name,
+    total_executions,
+    last_seen
+| sort last_seen desc

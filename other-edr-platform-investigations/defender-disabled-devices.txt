@@ -1,0 +1,20 @@
+// Title: Devices Where Microsoft Defender Process Is Not Running (Past 7 Days)
+// Category: Investigation Query
+// Note: This query uses a devices/execution.events query language rather
+//       than KQL/Advanced Hunting syntax — likely written for a different
+//       EDR/XDR platform's query builder. Kept here for reference; see the
+//       repo README for details before running it against Defender for
+//       Endpoint Advanced Hunting.
+
+devices during past 7d
+| where device.operating_system.platform == Windows
+| with execution.events during past 7d
+| compute defender_running = countif(
+    binary.product_name == "Microsoft Defender" or 
+    binary.product_name == "Microsoft Defender Helper" or 
+    binary.product_name == "Microsoft Defender - daemon" or 
+    binary.product_name == "Microsoft Malware Protection" or
+    binary.product_name == "Detect_AntiVirusDefenderA")
+| where defender_running == 0
+| list device.name, device.entity, device.operating_system.name, device.last_seen
+| sort device.last_seen desc

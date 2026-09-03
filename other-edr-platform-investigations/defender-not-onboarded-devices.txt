@@ -1,0 +1,22 @@
+// Title: Windows Devices With No Firewall/Defender-Related Process Activity (Past 30 Days)
+// Category: Investigation Query
+// Note: This query uses a devices/execution.events query language rather
+//       than KQL/Advanced Hunting syntax — likely written for a different
+//       EDR/XDR platform's query builder. Kept here for reference; see the
+//       repo README for details before running it against Defender for
+//       Endpoint Advanced Hunting.
+
+devices during past 30d
+| where device.operating_system.platform == Windows
+| with execution.events during past 30d
+| compute firewall_active = countif(
+    binary.name == "*firewall*" or 
+    binary.name == "*mpssvc*" or 
+    binary.name == "*wf*" or 
+    binary.name == "*BFE*" or
+    binary.product_name == "*Windows Defender*" or
+    binary.product_name == "*Microsoft Defender*" or
+    binary.name == "*MpCmdRun*")
+| where firewall_active == 0
+| list device.name, device.entity, device.operating_system.name, device.last_seen
+| sort device.last_seen desc
