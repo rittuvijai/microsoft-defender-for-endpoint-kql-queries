@@ -1,0 +1,29 @@
+// Title: Windows Server Security Configuration Assessment Report (Full)
+// Category: Security Configuration Assessment
+// Description: Pulls every failed, applicable Threat & Vulnerability
+//              Management (TVM) secure configuration check for Windows
+//              Servers, joined with the configuration knowledge base for
+//              category, risk description, CIS/benchmark mapping, and fix.
+// Table(s): DeviceTvmSecureConfigurationAssessment, DeviceTvmSecureConfigurationAssessmentKB
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+DeviceTvmSecureConfigurationAssessment
+| join DeviceTvmSecureConfigurationAssessmentKB on ConfigurationId
+| where OSPlatform startswith "WindowsServer" and not(OSPlatform contains "2012")
+| where IsCompliant == 0 and IsApplicable == 1
+| project DeviceName, OSPlatform, Timestamp, ConfigurationId, ConfigurationCategory, ConfigurationSubcategory, ConfigurationImpact, Context, ConfigurationName, ConfigurationDescription, RiskDescription, ConfigurationBenchmarks, Tags, RemediationOptions
+| project 
+    ['Server Name'] = DeviceName,
+    ['Operating System'] = OSPlatform,
+    ['Last Checked'] = Timestamp,
+    ['Check ID'] = ConfigurationId,
+    ['Security Category'] = ConfigurationCategory,
+    ['Security Subcategory'] = ConfigurationSubcategory,
+    ['Security Impact'] = ConfigurationImpact,
+    ['Additional Details'] = Context,
+    ['Security Check Name'] = ConfigurationName,
+    ['Check Description'] = ConfigurationDescription,
+    ['Security Risk'] = RiskDescription,
+    ['Security Standards'] = ConfigurationBenchmarks,
+    ['Related Tags'] = Tags,
+    ['How to Fix'] = RemediationOptions
