@@ -26,3 +26,7 @@ Thanks for considering a contribution to this Microsoft Defender for Endpoint Ad
 ## Reporting issues
 
 If a query throws an error or returns unexpected results in your tenant, open an issue with your Defender for Endpoint plan (P1/P2) and the error message.
+
+## Author
+**Rittu Vijai** — Senior Cloud Ops & Automation Engineer | Azure Observability | Defender Endpoint | KQL (Dallas-Fort Worth Metroplex)  
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rittuvijai)
