@@ -11,4 +11,8 @@ KQL queries for auditing **Microsoft Defender Antivirus compliance** on Windows 
 | [`antivirus-scan-recency-daily-report.kql`](antivirus-scan-recency-daily-report.kql) | Which servers haven't had a recent completed AV scan? |
 | [`av-compliance-and-signature-update-analysis.kql`](av-compliance-and-signature-update-analysis.kql) | Criticality-tiered breakdown of signature age and AV mode issues, with remediation steps |
 
+## Author
+**Rittu Vijai** — Senior Cloud Ops & Automation Engineer | Azure Observability | Defender Endpoint | KQL (Dallas-Fort Worth Metroplex)  
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rittuvijai)
+
 ⬅ [Back to main README](../../README.md)
