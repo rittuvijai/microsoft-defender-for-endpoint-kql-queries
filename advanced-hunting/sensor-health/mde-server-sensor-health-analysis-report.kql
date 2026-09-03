@@ -1,0 +1,53 @@
+// Title: MDE Server Sensor Health Analysis Report
+// Category: Sensor Health
+// Description: Similar to the diagnostic/remediation query, but formatted as
+//              a readable report: unhealthy sensor/communication/data
+//              collection checks per server with risk description and
+//              recommended fix pulled from the configuration knowledge base.
+// Table(s): DeviceTvmSecureConfigurationAssessment, DeviceTvmSecureConfigurationAssessmentKB
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+let configurationIDs = dynamic([
+   "scid-2000", // Sensor Enabled
+   "scid-2002", // Impaired Communications Windows
+   "scid-2001"  // Sensor Data Collection Windows
+]);
+DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId in (configurationIDs)
+| where OSPlatform startswith "WindowsServer" and not(OSPlatform contains "2012") 
+| extend Test = case(
+   ConfigurationId == "scid-2000", "Sensor Status",
+   ConfigurationId == "scid-2002", "Communications Status",
+   ConfigurationId == "scid-2001", "Data Collection",
+   "Unknown"
+)
+| extend Result = case(
+   IsApplicable == 0, "Not Applicable",
+   IsCompliant == 1, "Healthy",
+   "Unhealthy"
+)
+| extend HealthIssue = case(
+   Result == "Unhealthy" and Test contains "Sensor", "Sensor Disabled",
+   Result == "Unhealthy" and Test contains "Communications", "Communication Issues",
+   Result == "Unhealthy" and Test contains "Collection", "Data Collection Issues",
+   ""
+)
+| where Result == "Unhealthy"
+| join kind=leftouter (
+   DeviceTvmSecureConfigurationAssessmentKB
+   | project 
+       ConfigurationId,
+       ConfigurationName,
+       ConfigurationDescription,
+       RiskDescription,
+       RemediationOptions
+) on ConfigurationId
+| project
+   DeviceName,
+   ['Health Issue'] = HealthIssue,
+   OSPlatform,
+   LastSeen = Timestamp,
+   ['Configuration Name'] = ConfigurationName,
+   ['Risk Description'] = RiskDescription,
+   ['How to Fix'] = RemediationOptions
+| order by DeviceName asc

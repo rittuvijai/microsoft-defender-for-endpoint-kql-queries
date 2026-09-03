@@ -1,0 +1,71 @@
+// Title: MDE Server Sensor Health Diagnostic and Remediation Priority Report
+// Category: Sensor Health
+// Description: Flags unhealthy sensor status, communication issues, or data
+//              collection issues on Windows Servers, joins in last-seen IP
+//              address, and assigns a 1-5 remediation priority based on
+//              severity (days since last seen) and issue type.
+// Table(s): DeviceTvmSecureConfigurationAssessment, DeviceTvmSecureConfigurationAssessmentKB, DeviceInfo, DeviceNetworkInfo
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+let configurationIDs = dynamic([
+    "scid-2000", // Sensor Enabled
+    "scid-2002", // Impaired Communications Windows
+    "scid-2001"  // Sensor Data Collection Windows
+]);
+DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId in (configurationIDs)
+| where OSPlatform startswith "WindowsServer" and not(OSPlatform contains "2012") 
+| extend Test = case(
+    ConfigurationId == "scid-2000", "Sensor Status",
+    ConfigurationId == "scid-2002", "Communications Status",
+    ConfigurationId == "scid-2001", "Data Collection",
+    "Unknown"
+)
+| extend Result = case(
+    IsApplicable == 0, "Not Applicable",
+    IsCompliant == 1, "Healthy",
+    "Unhealthy"
+)
+| extend HealthIssue = case(
+    Result == "Unhealthy" and Test contains "Sensor", "Sensor Disabled",
+    Result == "Unhealthy" and Test contains "Communications", "Communication Issues",
+    Result == "Unhealthy" and Test contains "Collection", "Data Collection Issues",
+    ""
+)
+| where Result == "Unhealthy"
+| join kind=leftouter (
+    DeviceTvmSecureConfigurationAssessmentKB
+) on ConfigurationId
+| join kind=leftouter (
+    DeviceInfo
+    | where isnotempty(OSPlatform)
+    | summarize arg_max(Timestamp, *) by DeviceId
+) on DeviceId
+| join kind=leftouter (
+    DeviceNetworkInfo
+    | where Timestamp > ago(7d)
+    | where isnotempty(IPAddresses)
+    | mv-expand IPAddresses = parse_json(IPAddresses)
+    | extend IP = tostring(IPAddresses.IPAddress)
+    | where IPAddresses.AddressType == "Private"
+    | summarize 
+        LastIP = arg_max(Timestamp, IP),
+        AllIPs = make_set(IP)
+        by DeviceId
+) on DeviceId
+| extend DaysSinceLastSeen = datetime_diff('day', now(), Timestamp)
+| extend IsServerOutdated = DaysSinceLastSeen > 7
+| extend SeverityLevel = case(
+    DaysSinceLastSeen > 30, "Critical",
+    DaysSinceLastSeen > 14, "High",
+    DaysSinceLastSeen > 7, "Medium",
+    "Low"
+)
+| extend PriorityForFix = case(
+    SeverityLevel == "Critical" and HealthIssue == "Sensor Disabled", 1,
+    SeverityLevel == "Critical" and HealthIssue == "Communication Issues", 2,
+    SeverityLevel == "High", 3,
+    SeverityLevel == "Medium", 4,
+    5
+)
+| order by PriorityForFix asc, DeviceName asc
