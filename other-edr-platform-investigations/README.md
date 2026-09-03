@@ -11,4 +11,8 @@ They're kept here for reference and as a starting point if you want to **port th
 | [`npcap-installed-devices.txt`](npcap-installed-devices.txt) | Devices running the Npcap packet-capture driver |
 | [`sccm-not-installed-devices.txt`](sccm-not-installed-devices.txt) | Windows devices with no SCCM client process activity in 30 days |
 
+## Author
+**Rittu Vijai** — Senior Cloud Ops & Automation Engineer | Azure Observability | Defender Endpoint | KQL (Dallas-Fort Worth Metroplex)  
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rittuvijai)
+
 ⬅ [Back to main README](../README.md)
