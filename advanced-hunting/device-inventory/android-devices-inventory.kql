@@ -1,0 +1,43 @@
+// Title: Android Device Inventory (Last 90 Days)
+// Category: Device Inventory by OS
+// Description: Deduplicated inventory of Android devices seen in the last 90
+//              days (excludes Windows Servers), enriched with the most
+//              recent private IP address and onboarding eligibility.
+// Table(s): DeviceInfo, DeviceNetworkInfo
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+DeviceInfo
+| where Timestamp > ago(90d)
+| where OSPlatform !contains "WindowsServer"
+| where OSPlatform contains "Android"
+| where isnotempty(DeviceName)
+| extend BaseHostname = tolower(split(DeviceName, ".")[0])
+| summarize arg_max(strlen(DeviceName), *) by BaseHostname
+| join kind=leftouter (
+    DeviceNetworkInfo
+    | where Timestamp > ago(90d)
+    | where isnotempty(IPAddresses)
+    | mv-expand IPAddresses = parse_json(IPAddresses)
+    | extend IP = tostring(IPAddresses.IPAddress)
+    | where IPAddresses.AddressType == "Private"
+    | where not(IP matches regex "^fe80:")
+    | summarize arg_max(Timestamp, IP) by DeviceId
+    | summarize IPs = make_set(IP) by DeviceId
+) on DeviceId
+| extend CanBeOnboarded = case(
+    OnboardingStatus == "Can be onboarded", "Yes",
+    OnboardingStatus == "Onboarded", "Already onboarded",
+    "No"
+)
+| project 
+    DeviceName,
+    OSPlatform, 
+    OSVersion,
+    OnboardingStatus,
+    CanBeOnboarded,
+    LastSeen = Timestamp,
+    PrivateIPs = IPs,
+    PublicIP,
+    DeviceId,
+    MachineGroup
+| sort by DeviceName asc
