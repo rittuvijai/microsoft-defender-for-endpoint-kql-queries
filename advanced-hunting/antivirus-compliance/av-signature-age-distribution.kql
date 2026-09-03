@@ -1,0 +1,37 @@
+// Title: Antivirus Signature Age Distribution Analysis on Windows Servers
+// Category: Antivirus Compliance
+// Description: Buckets Windows Server devices by antivirus signature age
+//              (Current, Moderate, Outdated, Critical) to surface stale
+//              signature definitions that put servers at risk.
+// Table(s): DeviceTvmSecureConfigurationAssessment
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId == "scid-2011" and isnotnull(Context)
+| where OSPlatform startswith "WindowsServer" 
+| where not(OSPlatform contains "2012")
+| extend avdata=parsejson(Context)
+| extend 
+    AVSigVersion = tostring(avdata[0][0]),
+    AVSigLastUpdateTime = todatetime(avdata[0][2])
+| extend SignatureAge = datetime_diff('day', now(), AVSigLastUpdateTime)
+| extend AgeCategory = case(
+    SignatureAge <= 7, "Current (≤7 days)",
+    SignatureAge <= 14, "Moderate (8-14 days)",
+    SignatureAge <= 30, "Outdated (15-30 days)",
+    "Critical (>30 days)"
+)
+| summarize 
+    DeviceCount=count(),
+    DeviceList=make_set(DeviceName)
+    by AgeCategory
+| extend ComplianceStatus = case(
+    AgeCategory == "Current (≤7 days)", "Compliant",
+    "Non-Compliant"
+)
+| project 
+    ['Age Category'] = AgeCategory,
+    ['Device Count'] = DeviceCount,
+    ['Compliance Status'] = ComplianceStatus,
+    ['Affected Devices'] = DeviceList
+| order by ['Age Category'] asc

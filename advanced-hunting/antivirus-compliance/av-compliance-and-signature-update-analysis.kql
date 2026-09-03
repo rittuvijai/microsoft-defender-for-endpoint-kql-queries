@@ -1,0 +1,73 @@
+// Title: Microsoft Defender AV Compliance and Signature Update Analysis
+// Category: Antivirus Compliance
+// Description: Groups signature-age and AV-mode compliance issues into
+//              criticality tiers (Low → Critical), listing affected devices,
+//              OS platforms, and step-by-step remediation for each issue.
+// Table(s): DeviceTvmSecureConfigurationAssessment
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+let OutdatedThreshold = 7d;
+let NonCompliantMode = dynamic(['Passive', 'EDR Blocked', 'Unknown']);
+let avmodetable = DeviceTvmSecureConfigurationAssessment 
+| where ConfigurationId == "scid-2010" and isnotnull(Context)
+| extend avdata=parsejson(Context)
+| extend AVMode = case(
+   tostring(avdata[0][0]) == '0', 'Active',
+   tostring(avdata[0][0]) == '1', 'Passive',
+   tostring(avdata[0][0]) == '4', 'EDR Blocked',
+   'Unknown'
+)
+| project DeviceId, AVMode;
+DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId == "scid-2011" and isnotnull(Context)
+| where OSPlatform startswith "WindowsServer" and not(OSPlatform contains "2012") // Filter for Windows Server OS
+| extend avdata=parsejson(Context)
+| extend 
+   AVSigVersion = tostring(avdata[0][0]),
+   AVEngineVersion = tostring(avdata[0][1]),
+   AVSigLastUpdateTime = todatetime(avdata[0][2]),
+   AVProductVersion = tostring(avdata[0][3])
+| join avmodetable on DeviceId
+| extend SignatureAge = datetime_diff('day', now(), AVSigLastUpdateTime)
+| extend AgeCategory = case(
+   SignatureAge <= 30, "0-30 days",
+   SignatureAge <= 60, "31-60 days", 
+   SignatureAge <= 90, "61-90 days",
+   SignatureAge <= 180, "91-180 days",
+   SignatureAge <= 365, "181-365 days",
+   "365+ days"
+)
+| extend ComplianceIssues = pack_array(
+   iif(SignatureAge > 7, strcat("Outdated signatures: ", AgeCategory), ""),
+   iif(AVMode in (NonCompliantMode), strcat("Non-compliant AV Mode: ", AVMode), "")
+)
+| mv-expand Issue = ComplianceIssues to typeof(string)
+| where isnotempty(Issue)
+| summarize 
+   DevicesList = make_set(DeviceName),
+   DeviceCount = dcount(DeviceId),
+   DistinctOSPlatforms = make_set(OSPlatform)
+   by Issue
+| extend CriticalityLevel = case(
+   Issue contains "365+ days", "Critical",
+   Issue contains "181-365 days", "High",
+   Issue contains "91-180 days", "Medium High",
+   Issue contains "61-90 days", "Medium",
+   Issue contains "31-60 days", "Medium Low",
+   Issue contains "0-30 days", "Low",
+   Issue contains "Non-compliant", "High",
+   "Unknown"
+)
+| extend RemediationSteps = case(
+   Issue contains "Outdated signatures", "1. Check network connectivity\n2. Run Windows Update\n3. Force signature update: Update-MpSignature\n4. Review proxy/firewall settings",
+   Issue contains "Non-compliant AV Mode", "1. Check if Microsoft Defender is primary AV\n2. Remove conflicting AV software\n3. Run: Set-MpPreference -DisableRealtimeMonitoring $false",
+   "Review device configuration"
+)
+| project 
+   ['Criticality'] = CriticalityLevel,
+   ['Compliance Issue'] = Issue,
+   ['Affected Devices Count'] = DeviceCount,
+   ['OS Platforms Affected'] = DistinctOSPlatforms,
+   ['Affected Devices'] = DevicesList,
+   ['Remediation Steps'] = RemediationSteps
+| order by ['Criticality'] asc, ['Affected Devices Count'] desc

@@ -1,0 +1,79 @@
+// Title: Windows Server Antivirus Health Risk Assessment
+// Category: Antivirus Compliance
+// Description: Combines scan recency, scan count, AV enablement, and
+//              real-time protection status into a single High/Medium/Low
+//              risk score per server, with recommended remediation actions.
+// Table(s): DeviceInfo, DeviceEvents, DeviceTvmSecureConfigurationAssessment
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+let MaxScanAge = 7d;
+let RiskThreshold = 3;
+let ServerDevices = DeviceInfo
+| where OSPlatform startswith "WindowsServer"
+| where OSPlatform !contains_cs "2008" and OSPlatform !contains_cs "2012"
+| distinct DeviceId;
+let AVScans = DeviceEvents
+| where DeviceId in (ServerDevices)
+| where ActionType == "AntivirusScanCompleted"
+| summarize 
+   LastScanTime = arg_max(Timestamp, *),
+   ScanCount = count() 
+   by DeviceId
+| extend 
+   ScanType = tostring(parse_json(AdditionalFields).ScanTypeIndex),
+   DaysSinceLastScan = datetime_diff('day', now(), LastScanTime),
+   IsOutdatedScan = LastScanTime < ago(MaxScanAge);
+let AVStatus = DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId == "scid-2010"
+| summarize arg_max(Timestamp, *) by DeviceId
+| extend AVEnabled = IsCompliant;
+let RTStatus = DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId == "scid-2012"
+| summarize arg_max(Timestamp, *) by DeviceId
+| extend RTEnabled = IsCompliant;
+AVScans
+| join kind=leftouter (
+   DeviceInfo 
+   | where OSPlatform startswith "WindowsServer"
+   | summarize arg_max(Timestamp, *) by DeviceId
+   | project 
+       DeviceId,
+       OSPlatform,
+       OSVersion,
+       OnboardingStatus
+) on DeviceId
+| join kind=leftouter (AVStatus) on DeviceId
+| join kind=leftouter (RTStatus) on DeviceId
+| extend RiskFactors = pack_array(
+   iif(DaysSinceLastScan > 7, "Outdated Scan (>7 days)", ""),
+   iif(ScanCount < 2, "Insufficient Scan History", ""),
+   iif(not(AVEnabled), "AV Disabled", ""),
+   iif(not(RTEnabled), "Real-time Protection Disabled", "")
+)
+| extend RiskFactors = set_difference(RiskFactors, pack_array(""))
+| extend RiskLevel = case(
+   array_length(RiskFactors) >= RiskThreshold, "High",
+   array_length(RiskFactors) > 0, "Medium", 
+   "Low"
+)
+| project
+   DeviceName,
+   OSPlatform,
+   OSVersion,
+   OnboardingStatus,
+   LastScanTime,
+   DaysSinceLastScan,
+   ScanType,
+   ScanCount,
+   AVEnabled,
+   RTEnabled,
+   RiskFactors,
+   RiskLevel,
+   RecommendedActions = case(
+       RiskLevel == "High", "1. Immediate AV scan required\n2. Verify AV configuration\n3. Check real-time protection",
+       RiskLevel == "Medium", "1. Schedule AV scan\n2. Review security settings",
+       "Monitor regularly"
+   )
+| order by 
+   RiskLevel desc,
+   DaysSinceLastScan desc

@@ -1,0 +1,28 @@
+// Title: Windows Server Antivirus Scan Recency Daily Report
+// Category: Antivirus Compliance
+// Description: Daily report of the most recent completed antivirus scan per
+//              Windows Server, sorted by how many days ago the scan ran.
+//              Intended to be scheduled daily to catch scan drift early.
+// Table(s): DeviceInfo, DeviceEvents
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+let ServerDevices = DeviceInfo
+| where OSPlatform startswith "WindowsServer"
+| where OSPlatform !contains_cs "2008" and OSPlatform !contains_cs "2012"
+| distinct DeviceId;
+DeviceEvents
+| where DeviceId in (ServerDevices)
+| where ActionType == "AntivirusScanCompleted"
+| summarize arg_max(Timestamp, *) by DeviceId
+| extend 
+    ScanType = tostring(parse_json(AdditionalFields).ScanTypeIndex),
+    DaysAgo = datetime_diff('day', now(), Timestamp)
+| join kind=leftouter (
+    DeviceInfo 
+    | where OSPlatform startswith "WindowsServer"
+    | summarize arg_max(Timestamp, *) by DeviceId
+    | project DeviceId, OSPlatform, OSVersion
+) on DeviceId
+| project DeviceName, OSPlatform, OSVersion, ActionType, ScanType, DaysAgo
+| where DaysAgo > 0
+| sort by DaysAgo desc

@@ -1,0 +1,31 @@
+// Title: Microsoft Defender for Endpoint AV Compliance Status on Windows Servers
+// Category: Antivirus Compliance
+// Description: Calculates the compliance rate for AV Enabled, AV Signature Freshness,
+//              and Real-time Protection across all onboarded Windows Server devices
+//              (excludes Windows Server 2012) using DeviceTvmSecureConfigurationAssessment.
+// Table(s): DeviceTvmSecureConfigurationAssessment, DeviceTvmSecureConfigurationAssessmentKB, DeviceInfo
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+let ServerCount = DeviceInfo
+| where OSPlatform startswith "WindowsServer" 
+| where OSPlatform !contains_cs "2012"
+| summarize TotalServers=dcount(DeviceId);
+DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId in ("scid-2010", "scid-2011", "scid-2012") // AV enabled, signatures, realtime protection
+| where OSPlatform startswith "WindowsServer"
+| where OSPlatform !contains_cs "2012"
+| summarize 
+    IsCompliant=countif(IsCompliant == 1), 
+    Total=count()
+    by ConfigurationId
+| extend ComplianceRate = round((toreal(IsCompliant) / toreal(Total) * 100), 2)
+| join kind=inner (
+    DeviceTvmSecureConfigurationAssessmentKB
+    | project ConfigurationId, ConfigurationName
+) on ConfigurationId
+| project 
+    ['Configuration'] = ConfigurationName,
+    ['Compliant Devices'] = IsCompliant,
+    ['Total Devices'] = Total,
+    ['Compliance Rate'] = strcat(ComplianceRate, '%')
+| order by ['Compliance Rate'] asc

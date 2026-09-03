@@ -1,0 +1,44 @@
+// Title: Non-Compliant Windows Servers Detailed Report (AV Enabled / Signatures / Real-time Protection)
+// Category: Antivirus Compliance
+// Description: Lists every Windows Server device that fails one of the three
+//              core AV configuration checks (AV enabled, signature freshness,
+//              real-time protection) along with its current AV mode
+//              (Active / Passive / EDR Blocked / Unknown).
+// Table(s): DeviceTvmSecureConfigurationAssessment, DeviceInfo
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+let NonCompliantMode = dynamic(['Passive', 'EDR Blocked', 'Unknown']);
+let avmodetable = DeviceTvmSecureConfigurationAssessment 
+| where ConfigurationId == "scid-2010" and isnotnull(Context)
+| extend avdata=parsejson(Context)
+| extend AVMode = case(
+   tostring(avdata[0][0]) == '0', 'Active',
+   tostring(avdata[0][0]) == '1', 'Passive',
+   tostring(avdata[0][0]) == '4', 'EDR Blocked',
+   'Unknown'
+)
+| project DeviceId, AVMode;
+DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId in ("scid-2010", "scid-2011", "scid-2012")
+| where OSPlatform startswith "WindowsServer"
+| where not(OSPlatform contains "2012")
+| where IsCompliant == 0
+| join kind=leftouter (
+    DeviceInfo
+    | summarize arg_max(Timestamp, *) by DeviceId
+) on DeviceId
+| join kind=leftouter avmodetable on DeviceId
+| extend ComplianceIssue = case(
+    ConfigurationId == "scid-2010", "AV Not Enabled",
+    ConfigurationId == "scid-2011", "Outdated Signatures",
+    ConfigurationId == "scid-2012", "Realtime Protection Disabled",
+    "Unknown Issue"
+)
+| project 
+    DeviceName,
+    OSPlatform,
+    ComplianceIssue,
+    AVMode,
+    LastSeen=Timestamp,
+    OnboardingStatus
+| order by DeviceName asc
