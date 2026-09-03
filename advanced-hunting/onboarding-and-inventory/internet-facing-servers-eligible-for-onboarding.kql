@@ -1,0 +1,17 @@
+// Title: Internet-Facing Windows Servers Eligible for MDE Onboarding
+// Category: Onboarding & Device Inventory
+// Description: Identifies Windows Server devices with a public IP address
+//              whose onboarding status is "Can be onboarded" — a prioritized
+//              list for closing the highest-risk (internet-exposed) coverage
+//              gaps first.
+// Table(s): DeviceInfo
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+DeviceInfo
+| where DeviceType == "Server"
+| where OSPlatform contains "WindowsServer"
+| where OSPlatform !in ("WindowsServer2008", "WindowsServer2008R2", "WindowsServer2012", "WindowsServer2012R2")
+| where PublicIP != ""
+| where OnboardingStatus == "Can be onboarded"
+//| where ExposureLevel in ("High", "Medium", "Low")
+| summarize arg_max(Timestamp, *) by DeviceName

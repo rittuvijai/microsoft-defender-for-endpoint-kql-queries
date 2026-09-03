@@ -1,0 +1,31 @@
+// Title: Device Onboarding Status Distribution Across the Environment
+// Category: Onboarding & Device Inventory
+// Description: Summarizes total device count and the percentage split of
+//              Onboarded, Can Be Onboarded, Unsupported, and Insufficient
+//              Info devices — a quick environment-wide onboarding health KPI.
+// Table(s): DeviceInfo
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+// Query to analyze device onboarding status distribution across the environment
+DeviceInfo
+| summarize 
+    TotalDevices = dcount(DeviceId),
+    Onboarded = dcountif(DeviceId, OnboardingStatus == 'Onboarded'),
+    CanBeOnboarded = dcountif(DeviceId, OnboardingStatus == 'Can be onboarded'),
+    Unsupported = dcountif(DeviceId, OnboardingStatus == 'Unsupported'),
+    InsufficientInfo = dcountif(DeviceId, OnboardingStatus == 'Insufficient info')
+| extend 
+    OnboardedPercentage = round((toreal(Onboarded) / toreal(TotalDevices) * 100), 2),
+    CanBeOnboardedPercentage = round((toreal(CanBeOnboarded) / toreal(TotalDevices) * 100), 2),
+    UnsupportedPercentage = round((toreal(Unsupported) / toreal(TotalDevices) * 100), 2),
+    InsufficientInfoPercentage = round((toreal(InsufficientInfo) / toreal(TotalDevices) * 100), 2)
+| project
+    TotalDevices,
+    ['Onboarded Devices'] = Onboarded,
+    ['Onboarded %'] = strcat(OnboardedPercentage, '%'),
+    ['Can Be Onboarded Devices'] = CanBeOnboarded,
+    ['Can Be Onboarded %'] = strcat(CanBeOnboardedPercentage, '%'),
+    ['Unsupported Devices'] = Unsupported,
+    ['Unsupported %'] = strcat(UnsupportedPercentage, '%'),
+    ['Insufficient Info Devices'] = InsufficientInfo,
+    ['Insufficient Info %'] = strcat(InsufficientInfoPercentage, '%')

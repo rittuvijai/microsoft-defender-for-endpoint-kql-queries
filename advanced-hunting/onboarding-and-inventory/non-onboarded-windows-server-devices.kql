@@ -1,0 +1,46 @@
+// Title: Non-Onboarded Windows Server Devices in Unassigned Group
+// Category: Onboarding & Device Inventory
+// Description: Finds Windows Server devices (2012 and 2008 excluded) that are
+//              NOT onboarded to Defender for Endpoint and still sitting in
+//              the default "UnassignedGroup" machine group — a common queue
+//              for onboarding sweeps. Includes noise filters for known
+//              false-positive naming patterns.
+// Table(s): DeviceInfo, DeviceNetworkInfo
+// Data connector: Microsoft Defender for Endpoint (Advanced Hunting)
+
+DeviceInfo
+    | where Timestamp > ago(90d)
+    | where isnotempty(OSPlatform)
+    | where OSPlatform startswith "WindowsServer"
+    | where OSPlatform !contains_cs "2008" and OSPlatform !contains_cs "2012"
+    | where OnboardingStatus != "Onboarded"
+    | where MachineGroup == "UnassignedGroup"
+    | where isnotempty(DeviceName)
+    | extend BaseHostname = tolower(split(DeviceName, ".")[0])
+    | summarize arg_max(strlen(DeviceName), *) by BaseHostname
+| join kind=leftouter (
+    DeviceNetworkInfo
+    | where Timestamp > ago(90d)
+    | where isnotempty(IPAddresses)
+    | mv-expand IPAddresses = parse_json(IPAddresses)
+    | extend IP = tostring(IPAddresses.IPAddress)
+    | where IPAddresses.AddressType == "Private"
+    | where not(IP matches regex "^fe80:")
+    | summarize arg_max(Timestamp, IP) by DeviceId
+    | summarize IPs = make_set(IP) by DeviceId
+) on DeviceId
+| project 
+    DeviceName,
+    OSPlatform, 
+    OSVersion,
+    OSBuild,
+    OnboardingStatus,
+    LastSeen = Timestamp,
+    LatestPrivateIP = IPs,
+    DeviceId,
+    MachineGroup,
+    JoinType
+| sort by DeviceName asc
+| summarize arg_max(LastSeen, *) by DeviceName
+| where DeviceName !contains "robinson"
+| where DeviceName !startswith "win-"
